@@ -1,0 +1,308 @@
+---
+title: 'Linear & Logistic Regression: Backward elimination'
+author: "Farhat Jabeen"
+date: "20/1/2022"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_float:
+      collapsed: no
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+---
+### Load the required libraries.
+```{r}
+lapply(c("lme4", "lmerTest", "emmeans", "car", "lattice", "ggplot2", "irr", "knitr", "languageR", "MASS", "Rmisc", "dplyr", "MuMIn", "tidyr", "corpcor"), require, character.only = TRUE)
+```
+
+# Linear Regression
+**Problem: Predicting company profits.**
+```{r}
+#Read in the dataset.
+startup <- read.table("filepath", sep = ",", header = T)
+
+head(startup)
+names(startup)
+```
+
+### create a dummy variable for state (California, New York)
+```{r}
+startup$newyork <- 0
+startup[startup$State == "New York",]$newyork <- 1
+#I chose not to create the dummy for California as it can't be included in the analysis anyway.
+```
+
+## Step by step elimination
+
+### Begin modeling with putting all the variables in the linear regression model.
+**Predicting profit based on how much companies spend on R&D, administration, marketing, and if their location plays a role in this.**
+
+```{r}
+profitAll <- lm(Profit ~ R.D.Spend + Administration + Marketing.Spend + newyork, data = startup)
+
+#Calculate Type III Anova for significant p-value (0.05 in thsi instance).
+Anova(profitAll, type = "III")
+summary(profitAll)
+```
+
+### Remove the variable with the highest p-value (exceeding the a-level of 0.05) i.e. Administration.
+```{r}
+profitA <- lm(Profit ~ R.D.Spend + Marketing.Spend + newyork, data = startup)
+
+Anova(profitA, type = "III")
+summary(profitA)
+```
+
+### Remove the next variable with the highest p-value i.e. newyork.
+```{r}
+profitB <- lm(Profit ~ R.D.Spend + Marketing.Spend, data = startup)
+
+Anova(profitB, type = "III")
+summary(profitB)
+```
+
+### Remove the next variable with the highest p-value i.e. Marketing.Spend
+```{r}
+profitC <- lm(Profit ~ R.D.Spend, data = startup)
+
+Anova(profitC, type = "III")
+summary(profitC)
+```
+
+## Model comparison
+Adjusted R-squared value shows that profitB model is better with a slightly high value. Although the p-value for "Marketing.Spend" (0.06) is slightly above the a-level, removing it lowers the Adjusted R-squared value. As its p-value is only marginally above the a-level, "Marketing.Spend" can be kept in the final model.
+
+
+## Model interpretation
+The summary of profitB model shows that higher expenditure on R&D leads to higher company profits. The spending on marketing also leads to an increase in profits.
+
+
+# Logistic Regression1
+**Using their age and gender, is it possible to predict if someone visiting a website took an action or not.**
+```{r}
+email <- read.table("filepath", sep = ",", header = T)
+head(email)
+```
+
+### Look at the distribution of gender and if males/females differed in terms of taking action.
+```{r}
+table(email$TookAction, email$Gender)
+```
+
+### Create a dummy varibale for Gender.
+```{r}
+email$female <- "0"
+email[email$Gender == "Male",]$female <- "1"
+
+head(email)
+```
+
+
+### Run a logistic regression model with both the independent variables.
+```{r}
+femaleAge.glm <- glm(TookAction ~ Age + female, data = email, family = "binomial")
+summary(femaleAge.glm)
+
+```
+
+**Both the variables are significant at the a-level of 0.05. Older people are more likely to take an action as compared with younger ones. Males took action significantly more often than females.**
+
+## Model interpretation: Probabilities
+**Probability for Age.**
+```{r}
+plogis(0.88)
+```
+
+**Probability for Gender**
+```{r}
+plogis(4.43)
+```
+
+
+# Logistic Regression2
+**Geo-demographic segmentation: Using independent variables to predict how likely is a customer to leave a (fictional) bank.**
+```{r}
+#Following error message occurred: EOF within quoted string number of items read is not a multiple of the number of columns
+#using quote = "" resolves this issue.
+exitData <- read.table("filepath", sep = ",", header = T, quote = "")
+
+head(exitData)
+nrow(exitData)
+
+```
+
+### Create dummies for gender and geography.
+```{r}
+exitData$female <- 0
+exitData[exitData$Gender != "Female",]$female <- 1
+
+#keeping France as baseline, just due to alphabetical order.
+exitData$Germany <- 0
+exitData[exitData$Geography != "Germany",]$Germany <- 1
+
+exitData$Spain <- 0
+exitData[exitData$Geography != "Spain",]$Spain <- 1
+
+head(exitData)
+```
+
+### Run a logistic regression with all the independent variables.
+```{r}
+geodem.glm <- glm(Exited ~ CreditScore + Age + Tenure + Balance + NumOfProducts + HasCrCard + IsActiveMember + EstimatedSalary + female +  Spain + Germany, data = exitData, family = "binomial")
+
+summary(geodem.glm)
+
+```
+
+## Step by step elimination
+
+### Remove the variable with the highest p-value (exceeding the a-level of 0.05) i.e. Spain
+```{r}
+geodem.glmA <- glm(Exited ~ CreditScore + Age + Tenure + Balance + NumOfProducts + HasCrCard + IsActiveMember + EstimatedSalary + female + Germany, data = exitData, family = "binomial")
+
+summary(geodem.glmA)
+
+```
+
+### Remove HasCrCard
+```{r}
+geodem.glmB <- glm(Exited ~ CreditScore + Age + Tenure + Balance + NumOfProducts + IsActiveMember + EstimatedSalary + female + Germany, data = exitData, family = "binomial")
+
+summary(geodem.glmB)
+```
+
+### Remove EstimatedSalary
+```{r}
+geodem.glmC <- glm(Exited ~ CreditScore + Age + Tenure + Balance + NumOfProducts + IsActiveMember + female + Germany, data = exitData, family = "binomial")
+
+summary(geodem.glmC)
+```
+
+## Transforming independent variables: Calculating log of Balance
+```{r}
+#+1 because there are 0s in the Balance column
+exitData$logBalance <- log10((exitData$Balance) + 1)
+
+head(exitData)
+```
+
+### Replace Balance with logBalance in the regression model.
+```{r}
+geodem.glmD <- glm(Exited ~ CreditScore + Age + NumOfProducts + IsActiveMember + female + Germany + Tenure + logBalance, data = exitData, family = "binomial")
+
+summary(geodem.glmD)
+```
+
+## Creating derived variables
+### Balance divided by age to calculate accumulation of wealth over time in a customer's life.
+```{r}
+exitData$wealthAcc <- exitData$Balance / exitData$Age
+
+head(exitData)
+```
+
+### Add variable for wealth accumulation to the model.
+```{r}
+geodem.glmE <- glm(Exited ~ CreditScore + Age + NumOfProducts + IsActiveMember + female + Germany + Tenure + logBalance + wealthAcc, data = exitData, family = "binomial")
+
+summary(geodem.glmE)
+#not significant. Also, possible collinearity as balance and age are related with wealthAcc here.
+```
+
+## Checking for multicollinearity
+```{r}
+#Subset data from columns 7 to 19 to exclude irrelevant variables or the ones with factors.
+colExitData <- exitData[,7:19]
+head(colExitData)
+```
+
+### Calculate collineairy: Alternative 1
+**Using cor()**
+```{r}
+round(cor(colExitData), 2)
+#wealthAcc has high collinearity with Balance (0.93) and logBalance (0.87). Understandable!
+```
+
+### Calculate collineairy: Alternative 2
+**Using corpcor package**
+```{r}
+cor2pcor(cov(colExitData))
+
+```
+
+### Remove logBalance from the model due to collineairty with wealthAcc.
+```{r}
+geodem.glmF <- glm(Exited ~ CreditScore + Age + NumOfProducts + IsActiveMember + female + Germany + Tenure + wealthAcc, data = exitData, family = "binomial")
+
+summary(geodem.glmF)
+```
+
+### Calculate log of wealthAcc.
+```{r}
+exitData$logWealthAcc <- log10((exitData$wealthAcc) + 1)
+head(exitData)
+```
+
+### Replace wealthAcc with logWealthAcc in the model.
+```{r}
+geodem.glmG <- glm(Exited ~ CreditScore + Age + NumOfProducts + IsActiveMember + female + Germany + Tenure +  logWealthAcc, data = exitData, family = "binomial")
+
+summary(geodem.glmG)
+#Coefficient looks better for logWealthAcc.
+```
+
+**The final model is left with all the variables that are significant at the a-level of 0.05.**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
