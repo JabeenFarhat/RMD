@@ -33,21 +33,7 @@ stocks_series = tidy(stocks) %>%
 
 stocks_series
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#You can find the image in the images folder. The image has the same name as this R file.
 
 
 
